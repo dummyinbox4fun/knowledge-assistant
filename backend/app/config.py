@@ -1,0 +1,18 @@
+"""Central config. All env-dependent values live here — nowhere else."""
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    environment: str = "dev"
+    gemini_api_key: str = ""
+    chroma_path: str = "./chroma_data"
+    embedding_model_name: str = "BAAI/bge-base-en-v1.5"
+    access_token: str = ""
+    log_level: str = "INFO"
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()

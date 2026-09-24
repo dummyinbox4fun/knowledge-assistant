@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches: [dev, staging, preprod, main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Map branch to Render service
+        id: map
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            dev) echo "service_id=${{ secrets.RENDER_DEV_SERVICE_ID }}" >> $GITHUB_OUTPUT ;;
+            staging) echo "service_id=${{ secrets.RENDER_STAGING_SERVICE_ID }}" >> $GITHUB_OUTPUT ;;
+            preprod) echo "service_id=${{ secrets.RENDER_PREPROD_SERVICE_ID }}" >> $GITHUB_OUTPUT ;;
+            main) echo "service_id=${{ secrets.RENDER_PROD_SERVICE_ID }}" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Trigger Render deploy
+        run: |
+          curl -X POST "https://api.render.com/v1/services/${{ steps.map.outputs.service_id }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json"
