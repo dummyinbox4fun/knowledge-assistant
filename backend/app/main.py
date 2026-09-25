@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 
+from app.api.ingestion import router as ingestion_router
 from app.config import settings
 
 app = FastAPI(title="Personal Knowledge Assistant")
+app.include_router(ingestion_router)
 
 
 @app.get("/health")
