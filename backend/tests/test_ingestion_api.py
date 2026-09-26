@@ -3,9 +3,14 @@ from io import BytesIO
 from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
+from app.ingestion.store import clear_documents
 from app.main import app
 
 client = TestClient(app)
+
+
+def setup_function():
+    clear_documents()
 
 
 def make_test_pdf(text: str) -> bytes:
@@ -67,6 +72,24 @@ def test_upload_rejects_unsupported_file_type():
         files={"file": ("sample.docx", b"hello", "application/msword")},
     )
     assert resp.status_code == 400
+
+
+def test_documents_list_empty_initially():
+    resp = client.get("/ingestion/documents")
+    assert resp.status_code == 200
+    assert resp.json()["documents"] == []
+
+
+def test_documents_list_after_upload():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("sample.md", b"# Hello", "text/markdown")},
+    )
+    resp = client.get("/ingestion/documents")
+    assert resp.status_code == 200
+    docs = resp.json()["documents"]
+    assert len(docs) == 1
+    assert docs[0]["filename"] == "sample.md"
 
 
 def test_upload_rejects_invalid_utf8():
