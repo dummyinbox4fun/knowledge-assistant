@@ -18,10 +18,22 @@ def test_upload_markdown_success():
     assert data["length_chars"] == len(file_content)
 
 
-def test_upload_rejects_non_md_file():
+def test_upload_txt_success():
+    file_content = b"Plain text note content."
     resp = client.post(
         "/ingestion/upload",
-        files={"file": ("sample.txt", b"hello", "text/plain")},
+        files={"file": ("sample.txt", file_content, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["filename"] == "sample.txt"
+    assert data["content"] == "Plain text note content."
+
+
+def test_upload_rejects_unsupported_file_type():
+    resp = client.post(
+        "/ingestion/upload",
+        files={"file": ("sample.pdf", b"hello", "application/pdf")},
     )
     assert resp.status_code == 400
 
