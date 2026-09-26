@@ -21,6 +21,7 @@ export default [
     rules: {
       ...react.configs.recommended.rules,
       'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
     },
     settings: { react: { version: 'detect' } },
   },

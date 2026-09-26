@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import UploadForm from './UploadForm'
 
 export default function App() {
   const [status, setStatus] = useState('checking...')
@@ -15,6 +16,8 @@ export default function App() {
     <div style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
       <h1>Personal Knowledge Assistant</h1>
       <p>{status}</p>
+      <h2>Upload a document</h2>
+      <UploadForm />
     </div>
   )
 }
