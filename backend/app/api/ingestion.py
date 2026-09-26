@@ -1,24 +1,29 @@
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from app.ingestion.pdf import parse_pdf
 from app.ingestion.text import parse_text
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 SUPPORTED_TEXT_EXTENSIONS = (".md", ".txt")
+SUPPORTED_EXTENSIONS = SUPPORTED_TEXT_EXTENSIONS + (".pdf",)
 
 
 @router.post("/upload")
 async def upload_document(file: UploadFile):
-    if not file.filename.endswith(SUPPORTED_TEXT_EXTENSIONS):
+    if not file.filename.endswith(SUPPORTED_EXTENSIONS):
         raise HTTPException(
             status_code=400,
-            detail=f"Only {', '.join(SUPPORTED_TEXT_EXTENSIONS)} files are accepted",
+            detail=f"Only {', '.join(SUPPORTED_EXTENSIONS)} files are accepted",
         )
 
     raw_bytes = await file.read()
 
     try:
-        content = parse_text(raw_bytes)
+        if file.filename.endswith(".pdf"):
+            content = parse_pdf(raw_bytes)
+        else:
+            content = parse_text(raw_bytes)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
