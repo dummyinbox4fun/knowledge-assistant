@@ -114,6 +114,26 @@ def test_documents_list_includes_chunk_count_not_chunks():
     assert "chunks" not in docs[0]  # list endpoint shouldn't dump full chunk content
 
 
+def test_get_chunks_for_uploaded_document():
+    file_content = b"a" * 1200
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("chunked.txt", file_content, "text/plain")},
+    )
+    resp = client.get("/ingestion/documents/chunked.txt/chunks")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["filename"] == "chunked.txt"
+    assert data["chunk_count"] > 1
+    assert len(data["chunks"]) == data["chunk_count"]
+    assert "content" in data["chunks"][0]
+
+
+def test_get_chunks_for_missing_document_returns_404():
+    resp = client.get("/ingestion/documents/does-not-exist.md/chunks")
+    assert resp.status_code == 404
+
+
 def test_upload_rejects_invalid_utf8():
     resp = client.post(
         "/ingestion/upload",

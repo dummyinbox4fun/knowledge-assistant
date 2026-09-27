@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 
 from app.chunking.chunker import chunk_text
 from app.ingestion.pdf import parse_pdf
-from app.ingestion.store import add_document, list_documents
+from app.ingestion.store import add_document, get_document_chunks, list_documents
 from app.ingestion.text import parse_text
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
@@ -43,3 +43,11 @@ async def upload_document(file: UploadFile):
 @router.get("/documents")
 def get_documents():
     return {"documents": list_documents()}
+
+
+@router.get("/documents/{filename}/chunks")
+def get_document_chunks_endpoint(filename: str):
+    chunks = get_document_chunks(filename)
+    if chunks is None:
+        raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
+    return {"filename": filename, "chunk_count": len(chunks), "chunks": chunks}
