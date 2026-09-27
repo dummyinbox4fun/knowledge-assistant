@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     embedding_model_name: str = "BAAI/bge-base-en-v1.5"
     access_token: str = ""
     log_level: str = "INFO"
+    frontend_url: str = "http://localhost:5173"
 
     class Config:
         env_file = ".env"
