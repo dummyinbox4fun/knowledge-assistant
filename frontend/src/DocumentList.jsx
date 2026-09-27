@@ -1,4 +1,5 @@
 import { useEffect, useState, useImperativeHandle, forwardRef } from 'react'
+import ChunkViewer from './ChunkViewer'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
@@ -33,7 +34,9 @@ const DocumentList = forwardRef(function DocumentList(_props, ref) {
     <ul aria-label="document-list">
       {documents.map((doc) => (
         <li key={`${doc.filename}-${doc.uploaded_at}`}>
-          <strong>{doc.filename}</strong> — {doc.length_chars} characters
+          <strong>{doc.filename}</strong> — {doc.length_chars} characters —{' '}
+          {doc.chunk_count} chunk{doc.chunk_count === 1 ? '' : 's'}
+          <ChunkViewer filename={doc.filename} />
         </li>
       ))}
     </ul>
