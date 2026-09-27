@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile
 
+from app.chunking.chunker import chunk_text
 from app.ingestion.pdf import parse_pdf
 from app.ingestion.store import add_document, list_documents
 from app.ingestion.text import parse_text
@@ -28,12 +29,14 @@ async def upload_document(file: UploadFile):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    add_document(filename=file.filename, length_chars=len(content))
+    chunks = chunk_text(content)
+    add_document(filename=file.filename, length_chars=len(content), chunks=chunks)
 
     return {
         "filename": file.filename,
         "length_chars": len(content),
         "content": content,
+        "chunk_count": len(chunks),
     }
 
 

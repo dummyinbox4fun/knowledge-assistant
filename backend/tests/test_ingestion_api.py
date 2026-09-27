@@ -92,6 +92,28 @@ def test_documents_list_after_upload():
     assert docs[0]["filename"] == "sample.md"
 
 
+def test_upload_response_includes_chunk_count():
+    file_content = b"a" * 1200  # long enough to produce multiple chunks at default size
+    resp = client.post(
+        "/ingestion/upload",
+        files={"file": ("long.txt", file_content, "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["chunk_count"] > 1
+
+
+def test_documents_list_includes_chunk_count_not_chunks():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("sample.md", b"# Hello", "text/markdown")},
+    )
+    resp = client.get("/ingestion/documents")
+    docs = resp.json()["documents"]
+    assert docs[0]["chunk_count"] == 1
+    assert "chunks" not in docs[0]  # list endpoint shouldn't dump full chunk content
+
+
 def test_upload_rejects_invalid_utf8():
     resp = client.post(
         "/ingestion/upload",
