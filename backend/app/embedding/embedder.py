@@ -1,25 +1,26 @@
 """Local text embedding using sentence-transformers.
 
-Model is loaded once at module import time (not per-call) since loading
-is the expensive part — reusing the same model instance across requests
-is essential for reasonable performance.
+Both the `sentence_transformers` import AND the model itself are deferred
+until the first actual embedding call — not done at module import time.
+Importing sentence_transformers/torch is itself heavy (memory + time),
+and doing it eagerly at server startup was choking free-tier hosts with
+limited RAM before the app could even bind its port. Deferring it means
+server startup stays cheap; only the first real embedding request pays
+the cost (and by then the model is already cached in the Docker image
+from the build step, so it's just an import/load, not a download).
 """
 
 from functools import lru_cache
-
-from sentence_transformers import SentenceTransformer
 
 from app.config import settings
 
 
 @lru_cache(maxsize=1)
-def _get_model() -> SentenceTransformer:
-    """Lazily load the model once, cached for the process lifetime.
+def _get_model():
+    """Lazily import sentence_transformers AND load the model, once,
+    cached for the process lifetime."""
+    from sentence_transformers import SentenceTransformer
 
-    Using lru_cache instead of a plain module-level global so the model
-    doesn't load at import time (helps test startup speed, and avoids
-    loading it in processes/tests that never actually call embed_text).
-    """
     return SentenceTransformer(settings.embedding_model_name)
 
 
