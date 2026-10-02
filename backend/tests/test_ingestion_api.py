@@ -134,6 +134,32 @@ def test_get_chunks_for_missing_document_returns_404():
     assert resp.status_code == 404
 
 
+def test_chunks_endpoint_does_not_leak_embedding_vectors():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("sample.md", b"# Hello world", "text/markdown")},
+    )
+    resp = client.get("/ingestion/documents/sample.md/chunks")
+    data = resp.json()
+    assert "embedding" not in data["chunks"][0]
+
+
+def test_uploaded_chunks_have_embeddings_stored_internally():
+    # Verifies embeddings are actually generated and stored (not just
+    # hidden from the API) by checking the store directly.
+    from app.ingestion.store import get_document_chunks
+
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("embedded.md", b"# Some content to embed", "text/markdown")},
+    )
+    chunks = get_document_chunks("embedded.md")
+    assert len(chunks) > 0
+    assert "embedding" in chunks[0]
+    assert len(chunks[0]["embedding"]) > 0
+    assert isinstance(chunks[0]["embedding"][0], float)
+
+
 def test_upload_rejects_invalid_utf8():
     resp = client.post(
         "/ingestion/upload",
