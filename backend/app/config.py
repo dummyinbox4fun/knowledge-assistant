@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     environment: str = "dev"
     gemini_api_key: str = ""
     chroma_path: str = "./chroma_data"
-    embedding_model_name: str = "BAAI/bge-base-en-v1.5"
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     access_token: str = ""
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
