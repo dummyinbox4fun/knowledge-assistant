@@ -7,6 +7,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Install CPU-only torch explicitly BEFORE requirements.txt. Without this,
+# pip pulls the default GPU-capable torch build (800MB-2GB+), which is both
+# unnecessary (no GPU on Render) and almost certainly what's been causing
+# out-of-memory crashes on the free-tier 512MB instance. The CPU-only wheel
+# is a fraction of the size. Once torch is satisfied here, installing
+# sentence-transformers from requirements.txt won't pull in the GPU version.
+RUN pip install --no-cache-dir torch==2.4.1 --extra-index-url https://download.pytorch.org/whl/cpu
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
