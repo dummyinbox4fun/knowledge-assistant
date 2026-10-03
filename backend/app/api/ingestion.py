@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from app.chunking.chunker import chunk_text
+from app.embedding.embedder import embed_texts
 from app.ingestion.pdf import parse_pdf
 from app.ingestion.store import add_document, get_document_chunks, list_documents
 from app.ingestion.text import parse_text
@@ -30,6 +31,12 @@ async def upload_document(file: UploadFile):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     chunks = chunk_text(content)
+
+    chunk_texts = [chunk["content"] for chunk in chunks]
+    embeddings = embed_texts(chunk_texts)
+    for chunk, embedding in zip(chunks, embeddings):
+        chunk["embedding"] = embedding
+
     add_document(filename=file.filename, length_chars=len(content), chunks=chunks)
 
     return {
@@ -50,4 +57,17 @@ def get_document_chunks_endpoint(filename: str):
     chunks = get_document_chunks(filename)
     if chunks is None:
         raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
-    return {"filename": filename, "chunk_count": len(chunks), "chunks": chunks}
+
+    # Strip embedding vectors here — this endpoint is for eyeballing chunk
+    # text/boundaries (see #11); full embeddings are what #14's dedicated
+    # inspection endpoint is for. Keeping them out avoids bloating this
+    # response with hundreds of floats per chunk.
+    chunks_without_embeddings = [
+        {k: v for k, v in chunk.items() if k != "embedding"} for chunk in chunks
+    ]
+
+    return {
+        "filename": filename,
+        "chunk_count": len(chunks),
+        "chunks": chunks_without_embeddings,
+    }
