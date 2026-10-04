@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.embedding import router as embedding_router
 from app.api.ingestion import router as ingestion_router
 from app.config import settings
-
+from app.api.retrieval import router as retrieval_router
 app = FastAPI(title="Personal Knowledge Assistant")
 
 app.add_middleware(
@@ -20,7 +20,7 @@ app.add_middleware(
 
 app.include_router(ingestion_router)
 app.include_router(embedding_router)
-
+app.include_router(retrieval_router)
 
 @app.get("/health")
 def health():
