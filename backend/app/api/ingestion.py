@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile
-
+from app.vectorstore.store import add_chunks as add_chunks_to_vectorstore
 from app.chunking.chunker import chunk_text
 from app.embedding.embedder import embed_texts
 from app.ingestion.pdf import parse_pdf
@@ -38,7 +38,10 @@ async def upload_document(file: UploadFile):
         chunk["embedding"] = embedding
 
     add_document(filename=file.filename, length_chars=len(content), chunks=chunks)
-
+    try:
+        add_chunks_to_vectorstore(file.filename, chunks)
+    except Exception:
+        pass
     return {
         "filename": file.filename,
         "length_chars": len(content),
