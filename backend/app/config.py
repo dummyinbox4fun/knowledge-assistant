@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     access_token: str = ""
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
+    gemini_model_name: str = "gemini-3.5-flash-lite"
 
     class Config:
         env_file = ".env"
