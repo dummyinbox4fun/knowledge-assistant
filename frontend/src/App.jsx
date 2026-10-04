@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import UploadForm from './UploadForm'
 import DocumentList from './DocumentList'
-import SearchBox from "./SearchBox";
+import ChatBox from "./ChatBox";
 export default function App() {
   const [status, setStatus] = useState('checking...')
   const documentListRef = useRef(null)
@@ -26,7 +26,7 @@ export default function App() {
       <UploadForm onUploadSuccess={handleUploadSuccess} />
       <h2>Your documents</h2>
       <DocumentList ref={documentListRef} />
-      <SearchBox />
+      <ChatBox />
     </div>
   )
 }
