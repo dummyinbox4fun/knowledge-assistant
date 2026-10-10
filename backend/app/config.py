@@ -18,3 +18,23 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+def validate_required_settings(settings: "Settings") -> None:
+    """Fail fast and loud if a required setting is missing.
+
+    Skipped entirely under pytest (ENVIRONMENT=test) so the test suite
+    never needs a real Gemini key.
+    """
+    if settings.environment == "test":
+        return
+
+    missing = []
+    if not settings.gemini_api_key:
+        missing.append("GEMINI_API_KEY")
+
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variable(s): "
+            f"{', '.join(missing)}. Set them before starting the server. "
+            "See docs/configuration.md."
+        )
