@@ -5,7 +5,8 @@ from app.embedding.embedder import embed_texts
 from app.ingestion.pdf import parse_pdf
 from app.ingestion.store import add_document, get_document_chunks, list_documents
 from app.ingestion.text import parse_text
-
+import logging
+logger = logging.getLogger("app.ingestion")
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 SUPPORTED_TEXT_EXTENSIONS = (".md", ".txt")
@@ -15,6 +16,7 @@ SUPPORTED_EXTENSIONS = SUPPORTED_TEXT_EXTENSIONS + (".pdf",)
 @router.post("/upload")
 async def upload_document(file: UploadFile):
     if not file.filename.endswith(SUPPORTED_EXTENSIONS):
+        logger.warning("Upload rejected for %s: unsupported file type", file.filename)
         raise HTTPException(
             status_code=400,
             detail=f"Only {', '.join(SUPPORTED_EXTENSIONS)} files are accepted",
@@ -28,6 +30,7 @@ async def upload_document(file: UploadFile):
         else:
             content = parse_text(raw_bytes)
     except ValueError as e:
+        logger.warning("Upload rejected for %s: %s", file.filename, str(e))
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     chunks = chunk_text(content)
@@ -38,6 +41,7 @@ async def upload_document(file: UploadFile):
         chunk["embedding"] = embedding
 
     add_document(filename=file.filename, length_chars=len(content), chunks=chunks)
+    logger.info("Uploaded %s (%d chunks)", file.filename, len(chunks))
     try:
         add_chunks_to_vectorstore(file.filename, chunks)
     except Exception:
