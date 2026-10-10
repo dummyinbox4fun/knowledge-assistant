@@ -5,6 +5,8 @@ from app.api.embedding import router as embedding_router
 from app.api.ingestion import router as ingestion_router
 from app.config import settings, validate_required_settings
 from app.api.retrieval import router as retrieval_router
+from fastapi import Depends
+from app.auth import require_api_key
 import logging
 import time
 
@@ -48,10 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ingestion_router)
-app.include_router(embedding_router)
-app.include_router(retrieval_router)
-app.include_router(generation_router)
+app.include_router(ingestion_router, dependencies=[Depends(require_api_key)])
+app.include_router(embedding_router, dependencies=[Depends(require_api_key)])
+app.include_router(retrieval_router, dependencies=[Depends(require_api_key)])
+app.include_router(generation_router, dependencies=[Depends(require_api_key)])
 
 
 @app.get("/health")
