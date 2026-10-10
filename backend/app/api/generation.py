@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -5,6 +7,7 @@ from app.embedding.embedder import embed_text
 from app.generation.generator import generate_answer
 from app.vectorstore.store import query as vectorstore_query
 
+logger = logging.getLogger("app.generation")
 router = APIRouter(prefix="/generation", tags=["generation"])
 
 
@@ -16,6 +19,7 @@ class AnswerRequest(BaseModel):
 @router.post("/answer")
 def answer(request: AnswerRequest):
     if not request.query or not request.query.strip():
+        logger.warning("Answer rejected: empty query")
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     query_embedding = embed_text(request.query)
@@ -24,7 +28,12 @@ def answer(request: AnswerRequest):
     try:
         answer_text = generate_answer(request.query, chunks)
     except RuntimeError as e:
+        logger.error("Generation failed for query '%s...': %s", request.query[:50], str(e))
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+    logger.info(
+        "Answered '%s...' using %d chunks", request.query[:50], len(chunks)
+    )
 
     sources = [
         {
