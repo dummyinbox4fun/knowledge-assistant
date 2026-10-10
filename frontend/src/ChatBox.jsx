@@ -1,6 +1,5 @@
 import { useState } from "react";
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+import { BACKEND_URL, authHeaders } from "./apiConfig";
 
 function ChatBox() {
   const [questionText, setQuestionText] = useState("");
@@ -27,7 +26,7 @@ function ChatBox() {
     try {
       const response = await fetch(`${BACKEND_URL}/generation/answer`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ query: questionText, top_k: 5 }),
       });
 
