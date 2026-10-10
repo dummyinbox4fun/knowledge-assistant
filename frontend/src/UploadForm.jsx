@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+import { BACKEND_URL, authHeaders } from './apiConfig'
 
 export default function UploadForm({ onUploadSuccess }) {
   const [file, setFile] = useState(null)
@@ -28,6 +27,7 @@ export default function UploadForm({ onUploadSuccess }) {
     try {
       const res = await fetch(`${BACKEND_URL}/ingestion/upload`, {
         method: 'POST',
+        headers: authHeaders(),
         body: formData,
       })
 

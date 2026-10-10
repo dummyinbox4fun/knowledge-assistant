@@ -1,7 +1,6 @@
 import { useEffect, useState, useImperativeHandle, forwardRef } from 'react'
 import ChunkViewer from './ChunkViewer'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+import { BACKEND_URL, authHeaders } from './apiConfig'
 
 const DocumentList = forwardRef(function DocumentList(_props, ref) {
   const [documents, setDocuments] = useState([])
@@ -10,7 +9,9 @@ const DocumentList = forwardRef(function DocumentList(_props, ref) {
   const fetchDocuments = async () => {
     setStatus('loading')
     try {
-      const res = await fetch(`${BACKEND_URL}/ingestion/documents`)
+      const res = await fetch(`${BACKEND_URL}/ingestion/documents`, {
+        headers: authHeaders(),
+      })
       if (!res.ok) throw new Error('Failed to load documents')
       const data = await res.json()
       setDocuments(data.documents)
