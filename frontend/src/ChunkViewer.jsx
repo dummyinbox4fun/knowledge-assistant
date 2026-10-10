@@ -1,6 +1,5 @@
 import { useState } from 'react'
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+import { BACKEND_URL, authHeaders } from './apiConfig'
 
 export default function ChunkViewer({ filename }) {
   const [expanded, setExpanded] = useState(false)
@@ -20,7 +19,8 @@ export default function ChunkViewer({ filename }) {
     setStatus('loading')
     try {
       const res = await fetch(
-        `${BACKEND_URL}/ingestion/documents/${encodeURIComponent(filename)}/chunks`
+        `${BACKEND_URL}/ingestion/documents/${encodeURIComponent(filename)}/chunks`,
+        { headers: authHeaders() }
       )
       if (!res.ok) throw new Error('Failed to load chunks')
       const data = await res.json()
