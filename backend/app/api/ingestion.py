@@ -3,8 +3,14 @@ from app.vectorstore.store import add_chunks as add_chunks_to_vectorstore
 from app.chunking.chunker import chunk_text
 from app.embedding.embedder import embed_texts
 from app.ingestion.pdf import parse_pdf
-from app.ingestion.store import add_document, get_document_chunks, list_documents
 from app.ingestion.text import parse_text
+from app.ingestion.store import (
+    add_document,
+    delete_document,
+    document_exists,
+    get_document_chunks,
+    list_documents,
+)
 import logging
 logger = logging.getLogger("app.ingestion")
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
@@ -15,6 +21,15 @@ SUPPORTED_EXTENSIONS = SUPPORTED_TEXT_EXTENSIONS + (".pdf",)
 
 @router.post("/upload")
 async def upload_document(file: UploadFile):
+
+    if document_exists(file.filename):
+        logger.warning("Upload rejected for %s: already exists", file.filename)
+        raise HTTPException(
+            status_code=409,
+            detail=f"A document named '{file.filename}' already exists. "
+            "Delete it first if you want to replace it.",
+        )
+    
     if not file.filename.endswith(SUPPORTED_EXTENSIONS):
         logger.warning("Upload rejected for %s: unsupported file type", file.filename)
         raise HTTPException(
@@ -78,3 +93,13 @@ def get_document_chunks_endpoint(filename: str):
         "chunk_count": len(chunks),
         "chunks": chunks_without_embeddings,
     }
+
+@router.delete("/documents/{filename}")
+def delete_document_endpoint(filename: str):
+    deleted = delete_document(filename)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
+
+    logger.info("Deleted %s", filename)
+    return {"filename": filename, "deleted": True}
+
