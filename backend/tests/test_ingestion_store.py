@@ -39,10 +39,26 @@ def test_add_document_stores_chunks_and_count():
 
 
 def test_get_document_chunks_returns_stored_chunks():
-    chunks = [{"content": "abc", "position": 0, "start_char": 0, "end_char": 3}]
-    add_document(filename="c.md", length_chars=3, chunks=chunks)
-    assert get_document_chunks("c.md") == chunks
+    from app.vectorstore.store import add_chunks
 
+    chunks = [
+        {
+            "content": "abc",
+            "position": 0,
+            "start_char": 0,
+            "end_char": 3,
+            "embedding": [0.0] * 384,
+        }
+    ]
+    add_document(filename="c.md", length_chars=3, chunks=chunks)
+    add_chunks("c.md", chunks)
+
+    result = get_document_chunks("c.md")
+    assert len(result) == 1
+    assert result[0]["content"] == "abc"
+    assert result[0]["position"] == 0
+    assert result[0]["start_char"] == 0
+    assert result[0]["end_char"] == 3
 
 def test_get_document_chunks_missing_filename_returns_none():
     assert get_document_chunks("does-not-exist.md") is None
