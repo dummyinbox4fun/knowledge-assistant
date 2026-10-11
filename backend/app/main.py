@@ -8,6 +8,9 @@ from app.api.retrieval import router as retrieval_router
 from app.request_context import request_id_ctx_var, RequestIdLogFilter
 from fastapi import Depends
 from app.auth import require_api_key
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
 import logging
 import time
 import uuid
@@ -22,10 +25,21 @@ logger = logging.getLogger("app")
 
 app = FastAPI(title="Personal Knowledge Assistant")
 
+limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit])
+app.state.limiter = limiter
+
 
 @app.on_event("startup")
 def _check_config_on_startup():
     validate_required_settings(settings)
+
+
+# Registered first (innermost): SlowAPIMiddleware checks the rate limit and,
+# if exceeded, returns its own 429 response directly rather than raising an
+# exception that propagates further out. Registering it before log_requests
+# means log_requests wraps it — so call_next() below gets that 429 response
+# back like any other, and our request-ID/logging still applies to it.
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")
