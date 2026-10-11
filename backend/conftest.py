@@ -1,26 +1,36 @@
 import os
 os.environ.setdefault("ENVIRONMENT", "test")
 import sys
+
 import pytest
+
 sys.path.insert(0, os.path.dirname(__file__))
 
+os.environ.setdefault("ENVIRONMENT", "test")
+
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5433/postgres"
+)
+
+
 @pytest.fixture(autouse=True)
-def isolate_vectorstore(tmp_path, monkeypatch):
-    """Point every test at an isolated, throwaway Chroma path.
+def isolate_database(monkeypatch):
+    """Point every test at the local Docker test database, never the real
+    Supabase database configured in .env for manual/live use.
 
-    Without this, any test that hits /ingestion/upload (which writes into
-    the vector store as a side effect) pollutes whatever real chroma_path
-    is configured locally — which turned out to be the actual local
-    chroma_data/ folder used by `uvicorn` during manual testing. This
-    fixture is autouse, so it applies to every test in the suite, not
-    just test_vectorstore.py.
+    Truncates documents (which cascades to chunks via the foreign key)
+    before and after each test, so tests don't leak data into each other
+    or into whatever was left over from a previous run.
     """
+    from app import db
     from app.config import settings
-    from app.vectorstore import store
 
-    monkeypatch.setattr(settings, "chroma_path", str(tmp_path / "chroma_test"))
-    store._get_client.cache_clear()
-    store._get_collection.cache_clear()
+    monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
+
+    with db.get_cursor() as cur:
+        cur.execute("TRUNCATE documents CASCADE")
+
     yield
-    store._get_client.cache_clear()
-    store._get_collection.cache_clear()
+
+    with db.get_cursor() as cur:
+        cur.execute("TRUNCATE documents CASCADE")

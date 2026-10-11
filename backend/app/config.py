@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
     gemini_model_name: str = "gemini-3.5-flash-lite"
+    database_url: str = ""
 
     class Config:
         env_file = ".env"
@@ -19,11 +20,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
 def validate_required_settings(settings: "Settings") -> None:
     """Fail fast and loud if a required setting is missing.
 
     Skipped entirely under pytest (ENVIRONMENT=test) so the test suite
-    never needs a real Gemini key.
+    never needs real credentials.
     """
     if settings.environment == "test":
         return
@@ -31,6 +33,8 @@ def validate_required_settings(settings: "Settings") -> None:
     missing = []
     if not settings.gemini_api_key:
         missing.append("GEMINI_API_KEY")
+    if not settings.database_url:
+        missing.append("DATABASE_URL")
 
     if missing:
         raise RuntimeError(
