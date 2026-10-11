@@ -6,7 +6,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     environment: str = "dev"
     gemini_api_key: str = ""
-    chroma_path: str = "./chroma_data"
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     access_token: str = ""
     log_level: str = "INFO"
