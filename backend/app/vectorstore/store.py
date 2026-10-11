@@ -1,96 +1,80 @@
-"""Chroma-backed vector store for chunk embeddings.
+"""Postgres + pgvector backed vector store for chunk embeddings.
 
-Additive to the existing in-memory document store (app.ingestion.store) —
-this module is the persistent index used for semantic search (Module 4),
-while the in-memory store keeps backing the existing document-listing
-endpoints. The two are kept in sync at upload time.
-
-Client and collection are created lazily and cached, so importing this
-module costs nothing until the first real call.
+Replaces the Chroma-based store (V1) — this one lives in an external
+Postgres database instead of the ephemeral local filesystem, so it
+survives Render restarts/redeploys.
 """
-from functools import lru_cache
-
-from app.config import settings
-
-COLLECTION_NAME = "chunks"
-
-
-@lru_cache(maxsize=1)
-def _get_client():
-    import chromadb
-
-    return chromadb.PersistentClient(path=settings.chroma_path)
-
-
-@lru_cache(maxsize=1)
-def _get_collection():
-    client = _get_client()
-    return client.get_or_create_collection(name=COLLECTION_NAME)
+from app import db
 
 
 def add_chunks(filename: str, chunks: list[dict]) -> None:
     """Write/overwrite a document's chunks in the vector store.
 
-    Each chunk dict must have: content, position, embedding.
-    Uses upsert so re-uploading the same filename replaces its old chunks
-    instead of duplicating them.
+    Each chunk dict must have: content, position, embedding (start_char
+    and end_char are optional, used for display purposes only).
+    Deletes any existing chunks for this filename first, so re-uploading
+    the same filename replaces its old chunks instead of duplicating them.
     """
     if not chunks:
         return
 
-    collection = _get_collection()
-    ids = [f"{filename}::{chunk['position']}" for chunk in chunks]
-    embeddings = [chunk["embedding"] for chunk in chunks]
-    documents = [chunk["content"] for chunk in chunks]
-    metadatas = [
-        {"filename": filename, "position": chunk["position"]} for chunk in chunks
-    ]
-
-    collection.upsert(
-        ids=ids,
-        embeddings=embeddings,
-        documents=documents,
-        metadatas=metadatas,
-    )
+    with db.get_cursor() as cur:
+        cur.execute("DELETE FROM chunks WHERE filename = %s", (filename,))
+        for chunk in chunks:
+            cur.execute(
+                """
+                INSERT INTO chunks
+                    (filename, position, content, start_char, end_char, embedding)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    filename,
+                    chunk["position"],
+                    chunk["content"],
+                    chunk.get("start_char"),
+                    chunk.get("end_char"),
+                    chunk["embedding"],
+                ),
+            )
 
 
 def query(query_embedding: list[float], top_k: int = 5) -> list[dict]:
     """Return the top_k nearest chunks to the given query embedding.
 
     Returns [] if the store is empty, rather than raising — an empty
-    knowledge base is a normal state, not an error.
+    knowledge base is a normal state, not an error. Uses pgvector's
+    cosine distance operator (<=>), matching the "lower distance = more
+    similar" semantics the rest of the app already assumes.
     """
-    collection = _get_collection()
-    count = collection.count()
-    if count == 0:
-        return []
+    with db.get_cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM chunks")
+        count = cur.fetchone()[0]
+        if count == 0:
+            return []
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=min(top_k, count),
-    )
-
-    ids = results["ids"][0]
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
+        cur.execute(
+            """
+            SELECT filename, position, content, embedding <=> %s::vector AS distance
+            FROM chunks
+            ORDER BY embedding <=> %s::vector
+            LIMIT %s
+            """,
+            (query_embedding, query_embedding, min(top_k, count)),
+        )
+        rows = cur.fetchall()
 
     return [
         {
-            "filename": metadatas[i]["filename"],
-            "position": metadatas[i]["position"],
-            "content": documents[i],
-            "distance": distances[i],
+            "filename": row[0],
+            "position": row[1],
+            "content": row[2],
+            "distance": float(row[3]),
         }
-        for i in range(len(ids))
+        for row in rows
     ]
 
 
 def clear_collection() -> None:
-    """Test-only helper: drop the collection and reset cached singletons."""
-    client = _get_client()
-    try:
-        client.delete_collection(COLLECTION_NAME)
-    except Exception:
-        pass
-    _get_collection.cache_clear()
+    """Test-only helper: remove all chunks."""
+    with db.get_cursor() as cur:
+        cur.execute("DELETE FROM chunks")
