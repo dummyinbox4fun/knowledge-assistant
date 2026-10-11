@@ -5,15 +5,19 @@ from app.api.embedding import router as embedding_router
 from app.api.ingestion import router as ingestion_router
 from app.config import settings, validate_required_settings
 from app.api.retrieval import router as retrieval_router
+from app.request_context import request_id_ctx_var, RequestIdLogFilter
 from fastapi import Depends
 from app.auth import require_api_key
 import logging
 import time
+import uuid
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
 )
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(RequestIdLogFilter())
 logger = logging.getLogger("app")
 
 app = FastAPI(title="Personal Knowledge Assistant")
@@ -26,9 +30,14 @@ def _check_config_on_startup():
 
 @app.middleware("http")
 async def log_requests(request, call_next):
+    incoming_request_id = request.headers.get("X-Request-ID")
+    request_id = incoming_request_id or str(uuid.uuid4())
+    token = request_id_ctx_var.set(request_id)
+
     start = time.time()
     response = await call_next(request)
     duration_ms = round((time.time() - start) * 1000, 1)
+
     logger.info(
         "%s %s -> %s (%sms)",
         request.method,
@@ -36,6 +45,9 @@ async def log_requests(request, call_next):
         response.status_code,
         duration_ms,
     )
+
+    request_id_ctx_var.reset(token)
+    response.headers["X-Request-ID"] = request_id
     return response
 
 
