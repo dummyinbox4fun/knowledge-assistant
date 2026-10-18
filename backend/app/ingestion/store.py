@@ -92,3 +92,18 @@ def clear_documents() -> None:
     """
     with db.get_cursor() as cur:
         cur.execute("DELETE FROM documents")
+
+def delete_document(filename: str) -> bool:
+    """Delete a document and its chunks (chunks cascade via foreign key).
+
+    Returns True if a document was deleted, False if no document with
+    that filename existed.
+    """
+    with db.get_cursor() as cur:
+        cur.execute("DELETE FROM documents WHERE filename = %s", (filename,))
+        return cur.rowcount > 0
+
+def document_exists(filename: str) -> bool:
+    with db.get_cursor() as cur:
+        cur.execute("SELECT 1 FROM documents WHERE filename = %s", (filename,))
+        return cur.fetchone() is not None
