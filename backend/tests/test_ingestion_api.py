@@ -166,3 +166,75 @@ def test_upload_rejects_invalid_utf8():
         files={"file": ("bad.md", b"\xff\xfe\x00\x01invalid", "text/markdown")},
     )
     assert resp.status_code == 400
+
+def test_delete_document_removes_it():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("to_delete.md", b"# Delete me", "text/markdown")},
+    )
+    resp = client.delete("/ingestion/documents/to_delete.md")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["filename"] == "to_delete.md"
+    assert data["deleted"] is True
+
+    list_resp = client.get("/ingestion/documents")
+    filenames = [doc["filename"] for doc in list_resp.json()["documents"]]
+    assert "to_delete.md" not in filenames
+
+
+def test_delete_missing_document_returns_404():
+    resp = client.delete("/ingestion/documents/does-not-exist.md")
+    assert resp.status_code == 404
+
+
+def test_delete_document_also_removes_its_chunks():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("with_chunks.md", b"# Some content", "text/markdown")},
+    )
+    client.delete("/ingestion/documents/with_chunks.md")
+
+    resp = client.get("/ingestion/documents/with_chunks.md/chunks")
+    assert resp.status_code == 404
+
+
+def test_upload_duplicate_filename_rejected():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("dup.md", b"# Original content", "text/markdown")},
+    )
+    resp = client.post(
+        "/ingestion/upload",
+        files={"file": ("dup.md", b"# Second attempt", "text/markdown")},
+    )
+    assert resp.status_code == 409
+
+def test_upload_duplicate_filename_does_not_overwrite_original():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("dup2.md", b"# Original content", "text/markdown")},
+    )
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("dup2.md", b"# Second attempt", "text/markdown")},
+    )
+
+    resp = client.get("/ingestion/documents/dup2.md/chunks")
+    data = resp.json()
+    assert "Original content" in data["chunks"][0]["content"]
+
+
+def test_upload_same_filename_succeeds_after_deletion():
+    client.post(
+        "/ingestion/upload",
+        files={"file": ("dup3.md", b"# Original content", "text/markdown")},
+    )
+    client.delete("/ingestion/documents/dup3.md")
+
+    resp = client.post(
+        "/ingestion/upload",
+        files={"file": ("dup3.md", b"# New content after delete", "text/markdown")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "# New content after delete"
