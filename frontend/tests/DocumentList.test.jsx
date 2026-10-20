@@ -48,4 +48,27 @@ describe('DocumentList', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
   })
+
+    it('shows character and chunk counts for each document', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        documents: [
+          {
+            filename: 'notes.md',
+            length_chars: 1500,
+            chunk_count: 3,
+            uploaded_at: '2026-09-26T10:00:00Z',
+          },
+        ],
+      }),
+    })
+
+    render(<DocumentList />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/1,500 characters/)).toBeInTheDocument()
+      expect(screen.getByText(/3 chunks/)).toBeInTheDocument()
+    })
+  })
 })
