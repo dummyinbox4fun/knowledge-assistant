@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { BACKEND_URL, authHeaders } from "./apiConfig";
 
+const REQUEST_TIMEOUT_MS = 90000;
+
 function ChatBox() {
   const [questionText, setQuestionText] = useState("");
   const [askedQuestion, setAskedQuestion] = useState("");
@@ -26,17 +28,21 @@ function ChatBox() {
       return;
     }
 
-    setAskedQuestion(questionText);
+      setAskedQuestion(questionText);
     setLoading(true);
     setError(null);
     setAnswer(null);
     setSources([]);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(`${BACKEND_URL}/generation/answer`, {
         method: "POST",
         headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ query: questionText, top_k: 5 }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -48,8 +54,13 @@ function ChatBox() {
       setAnswer(data.answer);
       setSources(data.sources);
     } catch (err) {
-      setError(err.message || "Something went wrong");
+      if (err.name === "AbortError") {
+        setError("The server is taking too long to respond. Please try again.");
+      } else {
+        setError(err.message || "Something went wrong");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }
