@@ -65,4 +65,39 @@ describe('ChatBox', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/taking too long/i)
     })
   })
+
+  it('shows the empty state until a question is asked', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ answer: 'Hello back', sources: [] }),
+    })
+
+    render(<ChatBox emptyState={<p>Welcome panel</p>} />)
+    expect(screen.getByText('Welcome panel')).toBeInTheDocument()
+
+    ask('Hi')
+
+    await waitFor(() => {
+      expect(screen.getByText('Hello back')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Welcome panel')).not.toBeInTheDocument()
+  })
+
+  it('fills the input when a suggestion chip is clicked', () => {
+    render(<ChatBox />)
+    fireEvent.click(screen.getByRole('button', { name: 'Key points' }))
+    expect(screen.getByLabelText('Your question')).toHaveValue(
+      'What are the key points in my notes?'
+    )
+  })
+
+  it('shows an attach button only when onAttach is provided', () => {
+    const onAttach = vi.fn()
+    const { rerender } = render(<ChatBox />)
+    expect(screen.queryByRole('button', { name: 'Attach a document' })).not.toBeInTheDocument()
+
+    rerender(<ChatBox onAttach={onAttach} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Attach a document' }))
+    expect(onAttach).toHaveBeenCalledTimes(1)
+  })
 })
