@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     gemini_model_name: str = "gemini-3.5-flash-lite"
     database_url: str = ""
     rate_limit: str = "100/minute"
+    supabase_url: str = ""
 
     class Config:
         env_file = ".env"

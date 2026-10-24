@@ -7,7 +7,7 @@ from app.config import settings, validate_required_settings
 from app.api.retrieval import router as retrieval_router
 from app.request_context import request_id_ctx_var, RequestIdLogFilter
 from fastapi import Depends
-from app.auth import require_api_key
+from app.auth import require_auth
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
@@ -76,10 +76,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ingestion_router, dependencies=[Depends(require_api_key)])
-app.include_router(embedding_router, dependencies=[Depends(require_api_key)])
-app.include_router(retrieval_router, dependencies=[Depends(require_api_key)])
-app.include_router(generation_router, dependencies=[Depends(require_api_key)])
+app.include_router(ingestion_router, dependencies=[Depends(require_auth)])
+app.include_router(embedding_router, dependencies=[Depends(require_auth)])
+app.include_router(retrieval_router, dependencies=[Depends(require_auth)])
+app.include_router(generation_router, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")
