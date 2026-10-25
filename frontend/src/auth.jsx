@@ -10,6 +10,7 @@ const AuthContext = createContext({
   user: null,
   recovery: false,
   signIn: noop,
+  signInWithGoogle: noop,
   signUp: noop,
   resetPassword: noop,
   updatePassword: noop,
@@ -60,6 +61,15 @@ export function AuthProvider({ client = defaultClient, children }) {
     [client]
   )
 
+  const signInWithGoogle = useCallback(
+    () =>
+      client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      }),
+    [client]
+  )
+
   const signUp = useCallback(
     (email, password) =>
       client.auth.signUp({
@@ -95,6 +105,7 @@ export function AuthProvider({ client = defaultClient, children }) {
             user: session?.user ?? null,
             recovery,
             signIn,
+            signInWithGoogle,
             signUp,
             resetPassword,
             updatePassword,
@@ -106,12 +117,13 @@ export function AuthProvider({ client = defaultClient, children }) {
             user: null,
             recovery: false,
             signIn: noop,
+            signInWithGoogle: noop,
             signUp: noop,
             resetPassword: noop,
             updatePassword: noop,
             signOut: noop,
           },
-    [enabled, loading, session, recovery, signIn, signUp, resetPassword, updatePassword, signOut]
+    [enabled, loading, session, recovery, signIn, signInWithGoogle, signUp, resetPassword, updatePassword, signOut]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
