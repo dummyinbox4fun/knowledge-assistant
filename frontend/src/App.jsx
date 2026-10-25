@@ -5,6 +5,7 @@ import ChatBox from './ChatBox'
 import Welcome from './Welcome'
 import { ToastProvider } from './toast'
 import { ChatIcon, FolderIcon, UploadIcon } from './icons'
+import { useAuth } from './auth'
 
 const GRADIENT = 'linear-gradient(135deg, #e9ecff 0%, #f4f0ff 50%, #e6f2ff 100%)'
 const CARD = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'
@@ -38,6 +39,7 @@ export default function App() {
   const [documents, setDocuments] = useState(null)
   const [view, setView] = useState('ask') // ask | documents | upload
   const documentListRef = useRef(null)
+  const { user, signOut } = useAuth()
 
   useEffect(() => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
@@ -106,15 +108,31 @@ export default function App() {
                 >
                   K
                 </span>
-                <span className="truncate text-[15px] font-semibold">Knowledge Assistant</span>
+                <span className="hidden truncate text-[15px] font-semibold sm:inline">Knowledge Assistant</span>
               </div>
-              <p className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 md:text-[13px]">
-                <span
-                  className={`h-2 w-2 rounded-full ${STATUS_DOT[backendState]}`}
-                  aria-hidden="true"
-                />
-                {status}
-              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <p className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 md:text-[13px]">
+                  <span
+                    className={`h-2 w-2 rounded-full ${STATUS_DOT[backendState]}`}
+                    aria-hidden="true"
+                  />
+                  {status}
+                </p>
+                {user && (
+                  <>
+                    <span className="hidden max-w-[180px] truncate text-[13px] text-slate-600 lg:inline">
+                      {user.email}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={signOut}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 md:text-[13px]"
+                    >
+                      Sign out
+                    </button>
+                  </>
+                )}
+              </div>
             </header>
 
             {/* All views stay mounted so chat history and the document list survive tab switches */}
