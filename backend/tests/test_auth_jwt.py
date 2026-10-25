@@ -52,14 +52,13 @@ def make_token(private_key=SIGNING_KEY, **overrides):
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", SUPABASE_URL)
-    monkeypatch.setattr(settings, "access_token", "")
     monkeypatch.setattr(auth, "_get_jwks_client", lambda url: FakeJwksClient())
 
     app = FastAPI()
 
     @app.get("/whoami")
-    def whoami(user: AuthUser | None = Depends(require_auth)):
-        return {"id": user.id, "email": user.email} if user else {"id": None}
+    def whoami(user: AuthUser = Depends(require_auth)):
+        return {"id": user.id, "email": user.email}
 
     return TestClient(app)
 
@@ -127,12 +126,6 @@ def test_non_bearer_scheme_is_rejected(client):
     assert resp.status_code == 401
 
 
-def test_bad_token_is_rejected_even_when_legacy_auth_is_open(client):
-    # access_token is empty here (legacy path open); a bad token must still fail
-    resp = client.get("/whoami", headers=bearer("not-a-jwt"))
-    assert resp.status_code == 401
-
-
 def test_token_rejected_when_login_is_not_configured(client, monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", "")
     resp = client.get("/whoami", headers=bearer(make_token()))
@@ -160,36 +153,15 @@ def test_unknown_signing_key_returns_401(client, monkeypatch):
     assert resp.status_code == 401
 
 
-# --- legacy API key behaviour must be unchanged during the transition ---
+# --- no credentials / the old shared key no longer gets anyone in ---
 
 
-def test_legacy_key_still_works(client, monkeypatch):
-    monkeypatch.setattr(settings, "access_token", "secret-key")
+def test_no_credentials_is_rejected(client):
+    resp = client.get("/whoami")
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Sign in required"
+
+
+def test_old_api_key_header_no_longer_works(client):
     resp = client.get("/whoami", headers={"X-API-Key": "secret-key"})
-    assert resp.status_code == 200
-    assert resp.json() == {"id": None}
-
-
-def test_wrong_legacy_key_is_rejected(client, monkeypatch):
-    monkeypatch.setattr(settings, "access_token", "secret-key")
-    resp = client.get("/whoami", headers={"X-API-Key": "wrong"})
     assert resp.status_code == 401
-    assert resp.json()["detail"] == "Invalid or missing API key"
-
-
-def test_no_credentials_rejected_when_legacy_key_is_set(client, monkeypatch):
-    monkeypatch.setattr(settings, "access_token", "secret-key")
-    resp = client.get("/whoami")
-    assert resp.status_code == 401
-
-
-def test_open_when_nothing_is_configured(client):
-    resp = client.get("/whoami")
-    assert resp.status_code == 200
-
-
-def test_valid_token_works_when_legacy_key_is_also_set(client, monkeypatch):
-    monkeypatch.setattr(settings, "access_token", "secret-key")
-    resp = client.get("/whoami", headers=bearer(make_token()))
-    assert resp.status_code == 200
-    assert resp.json()["id"] == "user-123"
