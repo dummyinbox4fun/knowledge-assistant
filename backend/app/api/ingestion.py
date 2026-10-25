@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from app.auth import AuthUser, require_auth
 from app.vectorstore.store import add_chunks as add_chunks_to_vectorstore
 from app.chunking.chunker import chunk_text
 from app.embedding.embedder import embed_texts
@@ -20,9 +21,9 @@ SUPPORTED_EXTENSIONS = SUPPORTED_TEXT_EXTENSIONS + (".pdf",)
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile):
+async def upload_document(file: UploadFile, user: AuthUser = Depends(require_auth)):
 
-    if document_exists(file.filename):
+    if document_exists(user.id, file.filename):
         logger.warning("Upload rejected for %s: already exists", file.filename)
         raise HTTPException(
             status_code=409,
@@ -55,10 +56,15 @@ async def upload_document(file: UploadFile):
     for chunk, embedding in zip(chunks, embeddings):
         chunk["embedding"] = embedding
 
-    add_document(filename=file.filename, length_chars=len(content), chunks=chunks)
+    document = add_document(
+        user_id=user.id,
+        filename=file.filename,
+        length_chars=len(content),
+        chunks=chunks,
+    )
     logger.info("Uploaded %s (%d chunks)", file.filename, len(chunks))
     try:
-        add_chunks_to_vectorstore(file.filename, chunks)
+        add_chunks_to_vectorstore(document["storage_key"], chunks)
     except Exception:
         pass
     return {
@@ -70,13 +76,13 @@ async def upload_document(file: UploadFile):
 
 
 @router.get("/documents")
-def get_documents():
-    return {"documents": list_documents()}
+def get_documents(user: AuthUser = Depends(require_auth)):
+    return {"documents": list_documents(user.id)}
 
 
 @router.get("/documents/{filename}/chunks")
-def get_document_chunks_endpoint(filename: str):
-    chunks = get_document_chunks(filename)
+def get_document_chunks_endpoint(filename: str, user: AuthUser = Depends(require_auth)):
+    chunks = get_document_chunks(user.id, filename)
     if chunks is None:
         raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
 
@@ -95,11 +101,10 @@ def get_document_chunks_endpoint(filename: str):
     }
 
 @router.delete("/documents/{filename}")
-def delete_document_endpoint(filename: str):
-    deleted = delete_document(filename)
+def delete_document_endpoint(filename: str, user: AuthUser = Depends(require_auth)):
+    deleted = delete_document(user.id, filename)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
 
     logger.info("Deleted %s", filename)
     return {"filename": filename, "deleted": True}
-

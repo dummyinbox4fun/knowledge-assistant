@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import AuthUser, require_auth
 from app.embedding.embedder import embed_text
 from app.generation.generator import generate_answer
 from app.vectorstore.store import query as vectorstore_query
@@ -17,13 +18,13 @@ class AnswerRequest(BaseModel):
 
 
 @router.post("/answer")
-def answer(request: AnswerRequest):
+def answer(request: AnswerRequest, user: AuthUser = Depends(require_auth)):
     if not request.query or not request.query.strip():
         logger.warning("Answer rejected: empty query")
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     query_embedding = embed_text(request.query)
-    chunks = vectorstore_query(query_embedding, top_k=request.top_k)
+    chunks = vectorstore_query(query_embedding, user.id, top_k=request.top_k)
 
     try:
         answer_text = generate_answer(request.query, chunks)

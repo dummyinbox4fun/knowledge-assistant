@@ -47,7 +47,7 @@ def fake_login():
     from app.main import app
 
     app.dependency_overrides[require_auth] = lambda: AuthUser(
-        id="test-user", email="test@example.com"
+        id="00000000-0000-0000-0000-000000000001", email="test@example.com"
     )
     yield
     app.dependency_overrides.pop(require_auth, None)

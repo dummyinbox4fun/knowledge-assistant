@@ -8,6 +8,9 @@ from app.main import app
 
 client = TestClient(app)
 
+# Same id conftest.py's fake login uses
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
 
 def setup_function():
     clear_documents()
@@ -153,7 +156,7 @@ def test_uploaded_chunks_have_embeddings_stored_internally():
         "/ingestion/upload",
         files={"file": ("embedded.md", b"# Some content to embed", "text/markdown")},
     )
-    chunks = get_document_chunks("embedded.md")
+    chunks = get_document_chunks(TEST_USER_ID, "embedded.md")
     assert len(chunks) > 0
     assert "embedding" in chunks[0]
     assert len(chunks[0]["embedding"]) > 0

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth import AuthUser, require_auth
 from app.ingestion.store import get_document_chunks
 
 router = APIRouter(prefix="/embedding", tags=["embedding"])
@@ -8,8 +9,8 @@ SAMPLE_SIZE = 5  # how many vector values to show per chunk — full vectors are
 
 
 @router.get("/documents/{filename}/embeddings")
-def get_document_embeddings(filename: str):
-    chunks = get_document_chunks(filename)
+def get_document_embeddings(filename: str, user: AuthUser = Depends(require_auth)):
+    chunks = get_document_chunks(user.id, filename)
     if chunks is None:
         raise HTTPException(status_code=404, detail=f"No document found named '{filename}'")
 
