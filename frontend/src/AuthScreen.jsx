@@ -27,6 +27,29 @@ const TITLES = {
   update: ['Choose a new password', `Use at least ${MIN_PASSWORD} characters.`],
 }
 
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.2 5.5-4.7 7.2l7.6 5.9c4.4-4.1 6.9-10.1 6.9-17.6z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.9-6.1z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.8 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"
+      />
+    </svg>
+  )
+}
+
 export function Splash() {
   return (
     <div
@@ -40,7 +63,7 @@ export function Splash() {
 }
 
 export default function AuthScreen({ initialMode = 'signin' }) {
-  const { recovery, signIn, signUp, resetPassword, updatePassword } = useAuth()
+  const { recovery, signIn, signInWithGoogle, signUp, resetPassword, updatePassword } = useAuth()
   const [mode, setMode] = useState(recovery ? 'update' : initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -102,6 +125,25 @@ export default function AuthScreen({ initialMode = 'signin' }) {
     }
   }
 
+  const handleGoogle = async () => {
+    setError('')
+    setInfo('')
+    setBusy(true)
+    try {
+      const result = await signInWithGoogle()
+      if (result?.error) {
+        setError(friendlyError(result.error))
+        setBusy(false)
+      }
+      // On success the browser is sent to Google, so there is nothing more to do here.
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+      setBusy(false)
+    }
+  }
+
+  const showGoogle = mode === 'signin' || mode === 'signup'
+
   const submitLabel = {
     signin: 'Sign in',
     signup: 'Create account',
@@ -128,7 +170,26 @@ export default function AuthScreen({ initialMode = 'signin' }) {
         <h1 className="mt-6 text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+        {showGoogle && (
+          <>
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={busy}
+              className="mt-6 flex w-full items-center justify-center gap-2.5 rounded-lg border border-slate-300 bg-white py-2.5 text-slate-800 hover:bg-slate-50"
+            >
+              <GoogleIcon />
+              Continue with Google
+            </button>
+            <div className="mt-5 flex items-center gap-3 text-xs text-slate-500" aria-hidden="true">
+              <span className="h-px flex-1 bg-slate-200" />
+              or use your email
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+          </>
+        )}
+
+        <form onSubmit={handleSubmit} className={`${showGoogle ? 'mt-5' : 'mt-6'} space-y-4`} noValidate>
           {mode !== 'update' && (
             <div>
               <label htmlFor="auth-email" className="text-sm font-medium text-slate-700">

@@ -16,6 +16,7 @@ function makeClient({ session = null } = {}) {
         return { data: { subscription: { unsubscribe: vi.fn() } } }
       }),
       signInWithPassword: vi.fn().mockResolvedValue({ error: null }),
+      signInWithOAuth: vi.fn().mockResolvedValue({ error: null }),
       signUp: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
       resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
       updateUser: vi.fn().mockResolvedValue({ error: null }),
@@ -205,6 +206,50 @@ describe('register', () => {
       password: 'long-enough-1',
       options: { emailRedirectTo: window.location.origin },
     })
+  })
+})
+
+describe('Google sign-in', () => {
+  it('starts the Google flow and returns to this site afterwards', async () => {
+    const client = makeClient()
+    renderGate(client)
+    await screen.findByRole('heading', { name: 'Welcome back' })
+
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }))
+
+    await waitFor(() =>
+      expect(client.auth.signInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      })
+    )
+  })
+
+  it('is also offered on the register screen', async () => {
+    renderGate(makeClient())
+    await screen.findByRole('heading', { name: 'Welcome back' })
+    fireEvent.click(screen.getByRole('button', { name: 'Create an account' }))
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument()
+  })
+
+  it('is not shown on the password reset screen', async () => {
+    renderGate(makeClient())
+    await screen.findByRole('heading', { name: 'Welcome back' })
+    fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }))
+    expect(screen.queryByRole('button', { name: /continue with google/i })).not.toBeInTheDocument()
+  })
+
+  it('shows an error if Google sign-in cannot start', async () => {
+    const client = makeClient()
+    client.auth.signInWithOAuth.mockResolvedValue({
+      error: { message: 'Unsupported provider: provider is not enabled' },
+    })
+    renderGate(client)
+    await screen.findByRole('heading', { name: 'Welcome back' })
+
+    fireEvent.click(screen.getByRole('button', { name: /continue with google/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not enabled/i)
   })
 })
 
