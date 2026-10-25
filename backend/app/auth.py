@@ -1,17 +1,10 @@
 """Authentication.
 
-There are two ways in while V3.2 is being rolled out:
-
-1. A Supabase login token: ``Authorization: Bearer <JWT>``. Supabase signs
-   these with a private key it never shares; we verify them with its public
-   keys (JWKS), so no secret is stored here. Checks: signature, expiry,
-   audience ("authenticated") and issuer (this Supabase project).
-2. The legacy shared key: ``X-API-Key``, checked against ACCESS_TOKEN. If
-   ACCESS_TOKEN is unset, this path is open so local dev stays frictionless.
-   This path is removed in the last V3.2 PR.
-
-If an Authorization header is sent it is always verified: a bad token is
-rejected even when the legacy key is unset, never silently ignored.
+Every protected route requires a Supabase login token:
+``Authorization: Bearer <JWT>``. Supabase signs these with a private key it
+never shares; we verify them with its public keys (JWKS), so no secret is
+stored here. Checks: signature, expiry, audience ("authenticated") and issuer
+(this Supabase project).
 """
 
 from dataclasses import dataclass
@@ -29,19 +22,13 @@ from app.config import settings
 _ALGORITHMS = ["ES256", "RS256"]
 _AUDIENCE = "authenticated"
 
+_BEARER = {"WWW-Authenticate": "Bearer"}
+
 
 @dataclass(frozen=True)
 class AuthUser:
     id: str
     email: str | None = None
-
-
-def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
-    if not settings.access_token:
-        return  # auth disabled — no token configured for this environment
-
-    if x_api_key != settings.access_token:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 @lru_cache(maxsize=1)
@@ -53,7 +40,9 @@ def _get_jwks_client(jwks_url: str) -> PyJWKClient:
 def _verify_token(token: str) -> AuthUser:
     if not settings.supabase_url:
         raise HTTPException(
-            status_code=401, detail="Login is not configured on this server"
+            status_code=401,
+            detail="Login is not configured on this server",
+            headers=_BEARER,
         )
 
     base = settings.supabase_url.rstrip("/")
@@ -76,25 +65,21 @@ def _verify_token(token: str) -> AuthUser:
             detail="Could not verify your login right now. Please try again.",
         )
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        raise HTTPException(
+            status_code=401, detail="Invalid or expired token", headers=_BEARER
+        )
 
     return AuthUser(id=claims["sub"], email=claims.get("email"))
 
 
-def require_auth(
-    authorization: str | None = Header(default=None),
-    x_api_key: str | None = Header(default=None),
-) -> AuthUser | None:
-    """Accept a Supabase login token, or (for now) the legacy API key.
+def require_auth(authorization: str | None = Header(default=None)) -> AuthUser:
+    """Return the signed-in user, or reject the request with 401."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Sign in required", headers=_BEARER)
 
-    Returns the signed-in user for a login token, or None for the legacy key
-    or when auth is disabled.
-    """
-    if authorization:
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token.strip():
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        return _verify_token(token.strip())
-
-    require_api_key(x_api_key)
-    return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(
+            status_code=401, detail="Invalid or expired token", headers=_BEARER
+        )
+    return _verify_token(token.strip())

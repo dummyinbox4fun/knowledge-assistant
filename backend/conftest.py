@@ -34,3 +34,20 @@ def isolate_database(monkeypatch):
 
     with db.get_cursor() as cur:
         cur.execute("TRUNCATE documents CASCADE")
+
+
+@pytest.fixture(autouse=True)
+def fake_login():
+    """Treat every request in the API tests as coming from a signed-in test user.
+
+    The real login check is tested in test_auth.py and test_auth_jwt.py;
+    test_auth.py switches this stand-in off.
+    """
+    from app.auth import AuthUser, require_auth
+    from app.main import app
+
+    app.dependency_overrides[require_auth] = lambda: AuthUser(
+        id="test-user", email="test@example.com"
+    )
+    yield
+    app.dependency_overrides.pop(require_auth, None)
