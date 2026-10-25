@@ -10,10 +10,13 @@ from app import db
 def add_chunks(filename: str, chunks: list[dict]) -> None:
     """Write/overwrite a document's chunks in the vector store.
 
+    `filename` is the document's internal storage key (the value returned
+    as `storage_key` by add_document), not its display name.
+
     Each chunk dict must have: content, position, embedding (start_char
     and end_char are optional, used for display purposes only).
-    Deletes any existing chunks for this filename first, so re-uploading
-    the same filename replaces its old chunks instead of duplicating them.
+    Deletes any existing chunks for this key first, so re-uploading
+    the same document replaces its old chunks instead of duplicating them.
     """
     if not chunks:
         return
@@ -38,28 +41,38 @@ def add_chunks(filename: str, chunks: list[dict]) -> None:
             )
 
 
-def query(query_embedding: list[float], top_k: int = 5) -> list[dict]:
-    """Return the top_k nearest chunks to the given query embedding.
+def query(query_embedding: list[float], user_id: str, top_k: int = 5) -> list[dict]:
+    """Return the top_k nearest chunks to the query embedding, searching
+    only the given user's documents.
 
-    Returns [] if the store is empty, rather than raising — an empty
+    Returns [] if that user has no chunks, rather than raising — an empty
     knowledge base is a normal state, not an error. Uses pgvector's
     cosine distance operator (<=>), matching the "lower distance = more
     similar" semantics the rest of the app already assumes.
     """
     with db.get_cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM chunks")
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM chunks c JOIN documents d ON d.filename = c.filename
+            WHERE d.user_id = %s
+            """,
+            (user_id,),
+        )
         count = cur.fetchone()[0]
         if count == 0:
             return []
 
         cur.execute(
             """
-            SELECT filename, position, content, embedding <=> %s::vector AS distance
-            FROM chunks
-            ORDER BY embedding <=> %s::vector
+            SELECT d.display_name, c.position, c.content,
+                   c.embedding <=> %s::vector AS distance
+            FROM chunks c JOIN documents d ON d.filename = c.filename
+            WHERE d.user_id = %s
+            ORDER BY c.embedding <=> %s::vector
             LIMIT %s
             """,
-            (query_embedding, query_embedding, min(top_k, count)),
+            (query_embedding, user_id, query_embedding, min(top_k, count)),
         )
         rows = cur.fetchall()
 

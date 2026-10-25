@@ -43,7 +43,7 @@ client = TestClient(app)
 def _token():
     return jwt.encode(
         {
-            "sub": "user-1",
+            "sub": "00000000-0000-0000-0000-0000000000cc",
             "aud": "authenticated",
             "iss": f"{SUPABASE_URL}/auth/v1",
             "exp": int(time.time()) + 3600,
