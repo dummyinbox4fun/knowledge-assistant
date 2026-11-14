@@ -26,3 +26,6 @@ create table if not exists chunks (
     embedding vector(384) not null,
     unique (filename, position)
 );
+
+alter table documents enable row level security;
+alter table chunks enable row level security;
