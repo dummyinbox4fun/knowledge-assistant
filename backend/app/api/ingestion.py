@@ -62,11 +62,21 @@ async def upload_document(file: UploadFile, user: AuthUser = Depends(require_aut
         length_chars=len(content),
         chunks=chunks,
     )
-    logger.info("Uploaded %s (%d chunks)", file.filename, len(chunks))
     try:
         add_chunks_to_vectorstore(document["storage_key"], chunks)
     except Exception:
-        pass
+        logger.exception("Failed to store chunks for %s", file.filename)
+        # Undo the document row so the user can simply retry, instead of being
+        # stuck with a document that has no searchable content (and a 409).
+        try:
+            delete_document(user.id, file.filename)
+        except Exception:
+            logger.exception("Could not clean up %s after failed upload", file.filename)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the document. Please try uploading it again.",
+        ) from None
+    logger.info("Uploaded %s (%d chunks)", file.filename, len(chunks))
     return {
         "filename": file.filename,
         "length_chars": len(content),

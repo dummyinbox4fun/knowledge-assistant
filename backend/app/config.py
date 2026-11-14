@@ -1,6 +1,6 @@
 """Central config. All env-dependent values live here — nowhere else."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -14,9 +14,11 @@ class Settings(BaseSettings):
     rate_limit: str = "100/minute"
     supabase_url: str = ""
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        # Ignore unknown lines (e.g. a leftover ACCESS_TOKEN in an old .env)
+        extra="ignore",
+    )
 
 
 settings = Settings()
