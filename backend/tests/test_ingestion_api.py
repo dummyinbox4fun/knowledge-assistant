@@ -1,3 +1,4 @@
+import logging
 from io import BytesIO
 
 from fastapi.testclient import TestClient
@@ -241,3 +242,70 @@ def test_upload_same_filename_succeeds_after_deletion():
     )
     assert resp.status_code == 200
     assert resp.json()["content"] == "# New content after delete"
+
+
+def test_upload_fails_loudly_and_leaves_nothing_behind_when_storing_chunks_fails(
+    monkeypatch, caplog
+):
+    from app.api import ingestion as ingestion_module
+
+    def broken_vector_store(storage_key, chunks):
+        raise RuntimeError("simulated vector store failure")
+
+    monkeypatch.setattr(ingestion_module, "add_chunks_to_vectorstore", broken_vector_store)
+
+    with caplog.at_level(logging.ERROR, logger="app.ingestion"):
+        resp = client.post(
+            "/ingestion/upload",
+            files={"file": ("fail.md", b"# Some content", "text/markdown")},
+        )
+
+    assert resp.status_code == 500
+    assert "try uploading it again" in resp.json()["detail"]
+    # the failure is logged, not swallowed
+    assert "Failed to store chunks for fail.md" in caplog.text
+    # no half-saved document is left behind
+    assert client.get("/ingestion/documents").json()["documents"] == []
+
+
+def test_upload_can_be_retried_after_a_failed_attempt(monkeypatch):
+    from app.api import ingestion as ingestion_module
+
+    real_add_chunks = ingestion_module.add_chunks_to_vectorstore
+    calls = {"count": 0}
+
+    def fails_once(storage_key, chunks):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("simulated vector store failure")
+        return real_add_chunks(storage_key, chunks)
+
+    monkeypatch.setattr(ingestion_module, "add_chunks_to_vectorstore", fails_once)
+    files = {"file": ("retry.md", b"# Some content", "text/markdown")}
+
+    assert client.post("/ingestion/upload", files=files).status_code == 500
+    # not a 409: the failed attempt was rolled back
+    assert client.post("/ingestion/upload", files=files).status_code == 200
+
+    docs = client.get("/ingestion/documents").json()["documents"]
+    assert [d["filename"] for d in docs] == ["retry.md"]
+    assert docs[0]["chunk_count"] == 1
+
+
+def test_upload_still_reports_the_error_if_cleanup_also_fails(monkeypatch, caplog):
+    from app.api import ingestion as ingestion_module
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("simulated failure")
+
+    monkeypatch.setattr(ingestion_module, "add_chunks_to_vectorstore", broken)
+    monkeypatch.setattr(ingestion_module, "delete_document", broken)
+
+    with caplog.at_level(logging.ERROR, logger="app.ingestion"):
+        resp = client.post(
+            "/ingestion/upload",
+            files={"file": ("both.md", b"# Some content", "text/markdown")},
+        )
+
+    assert resp.status_code == 500
+    assert "Could not clean up both.md" in caplog.text

@@ -1,5 +1,8 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.api.generation import router as generation_router
 from app.api.embedding import router as embedding_router
 from app.api.ingestion import router as ingestion_router
@@ -9,6 +12,7 @@ from app.request_context import request_id_ctx_var, RequestIdLogFilter
 from fastapi import Depends
 from app.auth import require_auth
 from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 import logging
@@ -23,15 +27,31 @@ for _handler in logging.getLogger().handlers:
     _handler.addFilter(RequestIdLogFilter())
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Personal Knowledge Assistant")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Runs once at startup: fail fast and loudly if required settings are missing.
+    validate_required_settings(settings)
+    yield
+
+
+app = FastAPI(title="Personal Knowledge Assistant", lifespan=lifespan)
 
 limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit])
 app.state.limiter = limiter
 
 
-@app.on_event("startup")
-def _check_config_on_startup():
-    validate_required_settings(settings)
+# slowapi's default 429 body is {"error": ...}; every other error in this API
+# uses {"detail": ...}, so the frontend can show them all the same way.
+# This must stay a plain `def`: slowapi's middleware ignores `async def`
+# handlers and silently falls back to its own default.
+# (Rate-limit headers are not enabled on the Limiter, so none are added here.)
+def rate_limit_exceeded_handler(request, exc: RateLimitExceeded):
+    return JSONResponse(
+        {"detail": f"Rate limit exceeded: {exc.detail}"}, status_code=429
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 
 # Registered first (innermost): SlowAPIMiddleware checks the rate limit and,
