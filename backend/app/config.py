@@ -1,21 +1,24 @@
 """Central config. All env-dependent values live here — nowhere else."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     environment: str = "dev"
     gemini_api_key: str = ""
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-    access_token: str = ""
     log_level: str = "INFO"
     frontend_url: str = "http://localhost:5173"
     gemini_model_name: str = "gemini-3.5-flash-lite"
     database_url: str = ""
     rate_limit: str = "100/minute"
+    supabase_url: str = ""
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        # Ignore unknown lines (e.g. a leftover ACCESS_TOKEN in an old .env)
+        extra="ignore",
+    )
 
 
 settings = Settings()
@@ -35,6 +38,8 @@ def validate_required_settings(settings: "Settings") -> None:
         missing.append("GEMINI_API_KEY")
     if not settings.database_url:
         missing.append("DATABASE_URL")
+    if not settings.supabase_url:
+        missing.append("SUPABASE_URL")
 
     if missing:
         raise RuntimeError(

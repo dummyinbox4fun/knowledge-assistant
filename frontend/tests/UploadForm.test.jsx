@@ -57,4 +57,22 @@ describe('UploadForm', () => {
     render(<UploadForm />)
     expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled()
   })
+
+    it('shows the selected file name and size', () => {
+    render(<UploadForm />)
+    const input = screen.getByLabelText('file-input')
+    fireEvent.change(input, { target: { files: [makeFile('notes.md', 'hello')] } })
+
+    expect(screen.getByText('notes.md')).toBeInTheDocument()
+    expect(screen.getByText('5 B')).toBeInTheDocument()
+  })
+
+  it('accepts a file dropped on the drop zone', () => {
+    render(<UploadForm />)
+    const zone = screen.getByText(/drag and drop a file here/i)
+    fireEvent.drop(zone, { dataTransfer: { files: [makeFile('dropped.txt')] } })
+
+    expect(screen.getByText('dropped.txt')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload/i })).toBeEnabled()
+  })
 })
