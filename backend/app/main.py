@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.api.generation import router as generation_router
+from app.api.conversations import router as conversations_router
 from app.api.embedding import router as embedding_router
 from app.api.ingestion import router as ingestion_router
 from app.config import settings, validate_required_settings
@@ -100,6 +101,7 @@ app.include_router(ingestion_router, dependencies=[Depends(require_auth)])
 app.include_router(embedding_router, dependencies=[Depends(require_auth)])
 app.include_router(retrieval_router, dependencies=[Depends(require_auth)])
 app.include_router(generation_router, dependencies=[Depends(require_auth)])
+app.include_router(conversations_router, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

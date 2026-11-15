@@ -18,9 +18,10 @@ def isolate_database(monkeypatch):
     """Point every test at the local Docker test database, never the real
     Supabase database configured in .env for manual/live use.
 
-    Truncates documents (which cascades to chunks via the foreign key)
-    before and after each test, so tests don't leak data into each other
-    or into whatever was left over from a previous run.
+    Truncates documents (which cascades to chunks via the foreign key) and
+    conversations (which cascades to messages) before and after each test,
+    so tests don't leak data into each other or into whatever was left over
+    from a previous run.
     """
     from app import db
     from app.config import settings
@@ -28,12 +29,12 @@ def isolate_database(monkeypatch):
     monkeypatch.setattr(settings, "database_url", TEST_DATABASE_URL)
 
     with db.get_cursor() as cur:
-        cur.execute("TRUNCATE documents CASCADE")
+        cur.execute("TRUNCATE documents, conversations CASCADE")
 
     yield
 
     with db.get_cursor() as cur:
-        cur.execute("TRUNCATE documents CASCADE")
+        cur.execute("TRUNCATE documents, conversations CASCADE")
 
 
 @pytest.fixture(autouse=True)
