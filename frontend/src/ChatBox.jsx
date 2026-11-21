@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { BACKEND_URL, authHeaders } from "./apiConfig";
+import {
+  askInConversation,
+  createConversation,
+  deleteConversation,
+  getConversation,
+  titleFromQuestion,
+} from "./conversationsApi";
 import { ArrowUpIcon, PlusIcon } from "./icons";
+import Markdown from "./Markdown";
 
 const REQUEST_TIMEOUT_MS = 90000;
+// How close to the bottom (in px) still counts as "reading the latest message".
+const NEAR_BOTTOM_PX = 120;
 
 const SUGGESTIONS = [
   { label: "Summarize a document", prompt: "Summarize my notes in three points" },
@@ -11,20 +20,129 @@ const SUGGESTIONS = [
   { label: "Compare two notes", prompt: "Compare the main ideas across my documents" },
 ];
 
-function ChatBox({ emptyState = null, onAttach }) {
-  const [questionText, setQuestionText] = useState("");
-  const [askedQuestion, setAskedQuestion] = useState("");
-  const [answer, setAnswer] = useState(null);
-  const [sources, setSources] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const inputRef = useRef(null);
-  const bottomRef = useRef(null);
+// Add messages the thread does not already hold (a chat reloaded from the server
+// can already contain the answer that is just arriving).
+function mergeMessages(current, incoming) {
+  const known = new Set(current.map((m) => m.id));
+  return [...current, ...incoming.filter((m) => !known.has(m.id))];
+}
 
-  // Keep the newest message in view (optional call: jsdom has no scrollIntoView)
+function UserBubble({ children }) {
+  return (
+    <div className="flex justify-end">
+      <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2 text-sm text-white">
+        {children}
+      </p>
+    </div>
+  );
+}
+
+function AssistantBubble({ message }) {
+  const sources = Array.isArray(message.sources) ? message.sources : [];
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="text-sm leading-relaxed">
+          <Markdown>{message.content}</Markdown>
+        </div>
+
+        {sources.length > 0 && (
+          <>
+            <p className="mb-2 mt-4 text-xs font-semibold text-slate-500">Sources</p>
+            <ul aria-label="Sources" className="flex flex-wrap gap-2">
+              {sources.map((source, index) => (
+                <li
+                  key={`${source.filename}-${source.position}-${index}`}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                >
+                  {source.filename} (chunk {source.position}, distance{" "}
+                  {Number(source.distance).toFixed(3)})
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChatBox({
+  conversationId = null,
+  emptyState = null,
+  onAttach,
+  onConversationSaved,
+  onNewChat,
+}) {
+  const [questionText, setQuestionText] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loadState, setLoadState] = useState("idle"); // idle | loading | ready | notfound | error
+  const [pending, setPending] = useState(null); // { chatId, text } while an answer is awaited
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  const inputRef = useRef(null);
+  const scrollRef = useRef(null);
+  const stickToBottomRef = useRef(true);
+  // The chat on screen right now, readable from inside async code that outlives a render.
+  const activeIdRef = useRef(conversationId);
+  // A chat this component just created and filled in itself: when the address
+  // changes to it, there is nothing to load.
+  const createdIdRef = useRef(null);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
-  }, [answer, loading, error]);
+    activeIdRef.current = conversationId;
+  }, [conversationId]);
+
+  // Show the chat named by the address: empty for a new chat, loaded from the server otherwise.
+  useEffect(() => {
+    if (conversationId !== null && conversationId === createdIdRef.current) return undefined;
+    createdIdRef.current = null;
+    setError(null);
+
+    if (!conversationId) {
+      setMessages([]);
+      setLoadState("idle");
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    setMessages([]);
+    setLoadState("loading");
+    getConversation(conversationId, { signal: controller.signal })
+      .then((chat) => {
+        if (cancelled) return;
+        setMessages(chat.messages || []);
+        setLoadState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadState(err.status === 404 || err.status === 422 ? "notfound" : "error");
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [conversationId, reloadToken]);
+
+  // Opening a different chat starts at the latest message.
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [conversationId]);
+
+  // Keep the newest message in view, unless the user has scrolled up to read.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, pending, asking, error, loadState]);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  }
 
   function pickSuggestion(prompt) {
     setQuestionText(prompt);
@@ -33,70 +151,130 @@ function ChatBox({ emptyState = null, onAttach }) {
 
   async function handleAsk(e) {
     e.preventDefault();
+    if (asking) return;
 
-    if (!questionText.trim()) {
+    const text = questionText;
+    if (!text.trim()) {
       setError("Please enter a question");
-      setAskedQuestion("");
-      setAnswer(null);
-      setSources([]);
       return;
     }
 
-    setAskedQuestion(questionText);
-    setLoading(true);
+    const startedFor = conversationId;
+    stickToBottomRef.current = true;
     setError(null);
-    setAnswer(null);
-    setSources([]);
+    setAsking(true);
+    setPending({ chatId: startedFor, text });
+    setQuestionText("");
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let newChat = null;
 
     try {
-      const response = await fetch(`${BACKEND_URL}/generation/answer`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ query: questionText, top_k: 5 }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.detail || `Request failed (${response.status})`);
+      let chatId = startedFor;
+      if (!chatId) {
+        newChat = await createConversation(titleFromQuestion(text));
+        chatId = newChat.id;
       }
 
-      const data = await response.json();
-      setAnswer(data.answer);
-      setSources(data.sources);
-    } catch (err) {
-      if (err.name === "AbortError") {
-        setError("The server is taking too long to respond. Please try again.");
+      const result = await askInConversation(chatId, text, { signal: controller.signal });
+      const stillHere = activeIdRef.current === startedFor;
+
+      if (stillHere) {
+        setMessages((current) =>
+          mergeMessages(current, [result.user_message, result.assistant_message])
+        );
+        if (newChat) createdIdRef.current = newChat.id;
+      }
+
+      const activeAt = result.assistant_message.created_at;
+      if (newChat) {
+        onConversationSaved?.({ ...newChat, updated_at: activeAt }, { open: stillHere });
       } else {
-        setError(err.message || "Something went wrong");
+        onConversationSaved?.({ id: chatId, updated_at: activeAt }, { open: false });
+      }
+    } catch (err) {
+      // The server saves nothing when answering fails, so don't leave an empty chat behind.
+      if (newChat) deleteConversation(newChat.id).catch(() => {});
+
+      if (activeIdRef.current === startedFor) {
+        // Give the question back so the user can simply try again.
+        setQuestionText((current) => current || text);
+        setError(
+          err.name === "AbortError"
+            ? "The server is taking too long to respond. Please try again."
+            : err.message || "Something went wrong"
+        );
       }
     } finally {
       clearTimeout(timeoutId);
-      setLoading(false);
+      setAsking(false);
+      setPending(null);
     }
   }
 
-  const showEmpty = !askedQuestion && !error;
+  const waitingHere = pending !== null && pending.chatId === conversationId;
+  const showEmpty = !conversationId && messages.length === 0 && !waitingHere && !error;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8" aria-live="polite">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8"
+      >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 py-4 md:short:py-2">
           {/* my-auto centers the welcome content but never clips it when the window is very short */}
           {showEmpty && <div className="my-auto">{emptyState}</div>}
 
-          {askedQuestion && (
-            <div className="flex justify-end">
-              <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2 text-sm text-white">
-                {askedQuestion}
-              </p>
+          {loadState === "loading" && (
+            <p role="status" className="py-8 text-center text-sm text-slate-500">
+              Loading conversation...
+            </p>
+          )}
+
+          {loadState === "notfound" && (
+            <div className="my-auto rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <p className="text-sm font-medium">This chat could not be found.</p>
+              <p className="mt-1 text-sm text-slate-600">It may have been deleted.</p>
+              {onNewChat && (
+                <button type="button" onClick={onNewChat} className="mt-4">
+                  Start a new chat
+                </button>
+              )}
             </div>
           )}
 
-          {loading && (
+          {loadState === "error" && (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
+              <p>Could not load this chat.</p>
+              <button
+                type="button"
+                onClick={() => setReloadToken((t) => t + 1)}
+                className="mt-2 border border-red-200 bg-white text-red-700 hover:bg-red-50"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {messages.map((message) =>
+            message.role === "user" ? (
+              <UserBubble key={message.id}>{message.content}</UserBubble>
+            ) : (
+              <AssistantBubble key={message.id} message={message} />
+            )
+          )}
+
+          {waitingHere && <UserBubble>{pending.text}</UserBubble>}
+
+          {waitingHere && (
             <div className="flex justify-start">
               <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3">
                 <span className="sr-only">Generating answer</span>
@@ -115,36 +293,6 @@ function ChatBox({ emptyState = null, onAttach }) {
               {error}
             </p>
           )}
-
-          {answer && (
-            <div className="flex justify-start">
-              <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <h3 className="mb-1 mt-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Answer
-                </h3>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{answer}</p>
-
-                {sources.length > 0 && (
-                  <>
-                    <h4 className="mb-2 mt-4">Sources</h4>
-                    <ul className="flex flex-wrap gap-2">
-                      {sources.map((source, index) => (
-                        <li
-                          key={`${source.filename}-${source.position}-${index}`}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
-                        >
-                          {source.filename} (chunk {source.position}, distance{" "}
-                          {source.distance.toFixed(3)})
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div ref={bottomRef} />
         </div>
       </div>
 
@@ -181,11 +329,11 @@ function ChatBox({ emptyState = null, onAttach }) {
             />
             <button
               type="submit"
-              disabled={loading}
-              aria-label={loading ? "Thinking..." : "Ask"}
+              disabled={asking}
+              aria-label={asking ? "Thinking..." : "Ask"}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-900 p-0 text-white hover:bg-slate-700"
             >
-              {loading ? (
+              {asking ? (
                 <span
                   className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
                   aria-hidden="true"

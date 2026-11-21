@@ -1,4 +1,5 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { AuthProvider } from '../src/auth'
 import AuthGate from '../src/AuthGate'
@@ -294,7 +295,9 @@ describe('sign out', () => {
     render(
       <AuthProvider client={client}>
         <AuthGate>
-          <App />
+          <MemoryRouter>
+            <App />
+          </MemoryRouter>
         </AuthGate>
       </AuthProvider>
     )
