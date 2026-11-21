@@ -55,3 +55,21 @@ export function ArrowUpIcon(props) {
     </Icon>
   )
 }
+
+export function MenuIcon(props) {
+  return (
+    <Icon {...props}>
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </Icon>
+  )
+}
+
+export function MoreIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </Icon>
+  )
+}
